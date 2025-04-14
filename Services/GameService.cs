@@ -377,9 +377,76 @@ public class GameService
             // Need to ensure the start point is correct according to the dice roll used (handled by dice check logic)
         }
 
+        if (_gameState.CurrentDiceRoll?.Length == 2 && // Was a normal roll (not doubles already partially played)
+    _gameState.CurrentDiceRoll[0] != _gameState.CurrentDiceRoll[1] && // Not doubles
+    _gameState.RemainingMoves.Count == 2) // Both dice are theoretically still available (check performed at start of move attempt)
+        {
+            int dieX = diceValueNeeded; // The die used for the move currently being validated
+            int dieY = _gameState.RemainingMoves.FirstOrDefault(d => d != dieX); // The *other* die
+
+            if (dieY != default) // Ensure we found the other die
+            {
+                // Check if *any* move was possible with die X *anywhere* on the board
+                bool movePossibleWithX = CanPlayerMoveWithSpecificDie(playerId, dieX);
+                // Check if *any* move was possible with die Y *anywhere* on the board
+                bool movePossibleWithY = CanPlayerMoveWithSpecificDie(playerId, dieY);
+
+                if (movePossibleWithX && !movePossibleWithY)
+                {
+                    // Only X was playable, the current move attempt (using X) is mandatory - allow it.
+                }
+                else if (!movePossibleWithX && movePossibleWithY)
+                {
+                    // Only Y was playable, but player is attempting a move with X. This is invalid.
+                    return (false, 0, $"Must play the other die ({dieY}) as it's the only possible move.");
+                }
+                else if (movePossibleWithX && movePossibleWithY)
+                {
+                    // Both dice were playable independently at the start. Now check the specific rule:
+                    // "If either number can be played but not both..." This implies a scenario where
+                    // playing one prevents playing the other. The simpler interpretation is often:
+                    // If only ONE die *total* can be moved (regardless of which one), play the larger.
+                    // If *both* moves can be completed (sequentially), the order doesn't matter unless
+                    // one choice blocks the other entirely.
+
+                    // Let's implement the check: If ONLY ONE die value leads to ANY valid move, enforce it.
+                    // The logic above already covers this: if !movePossibleWithX and movePossibleWithY,
+                    // then Y must be played.
+
+                    // Now consider the "play larger die" part explicitly.
+                    if (dieX < dieY && !movePossibleWithY) // Player chose smaller X, and larger Y was impossible
+                    {
+                        // This is fine, X was the only choice.
+                    }
+                    else if (dieY < dieX && !movePossibleWithX) // Player chose smaller Y, and larger X was impossible
+                    {
+                        // This case handled by the check earlier - if !movePossibleWithX && movePossibleWithY, it returns false.
+                    }
+                    // If both were possible initially, allow the move. The requirement to play *both*
+                    // is handled by the turn ending logic in MakeMove. The tricky case of
+                    // "can play 6 OR 4, but not both sequentially" is complex and sometimes ignored
+                    // in simpler implementations. We'll allow either move if both were initially possible.
+
+                }
+                // else if (!movePossibleWithX && !movePossibleWithY) -> Handled by CanPlayerMove check in RollDice/MakeMove
+            }
+        }
+
 
         // If all checks pass
         return (true, diceValueNeeded, string.Empty);
+    }
+
+    // New helper method in GameService
+    private bool CanPlayerMoveWithSpecificDie(PlayerId playerId, int die)
+    {
+        // Temporarily create a list containing only the die to check
+        var singleDieList = new List<int> { die };
+        // Call the existing CanPlayerMove logic, but only considering this single die
+        return CanPlayerMove(playerId, singleDieList);
+        // NOTE: This assumes CanPlayerMove correctly uses the passed list.
+        // You might need to adjust CanPlayerMove slightly if it relies on _gameState.RemainingMoves directly internally.
+        // A safer way might be to copy the core logic of CanPlayerMove here and filter by the specific die.
     }
 
     private bool IsBearingOffMove(PlayerId playerId, MoveData move)

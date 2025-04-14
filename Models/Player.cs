@@ -7,6 +7,7 @@ public class Player
     public PlayerId Id { get; init; }
     public required string ConnectionId { get; set; } // SignalR connection ID
     public string Name { get; set; } = string.Empty; // e.g., "Player 1"
+
     public PlayerColor Color { get; init; }
 
     [JsonIgnore] // Don't serialize internal state like readiness directly if not needed
