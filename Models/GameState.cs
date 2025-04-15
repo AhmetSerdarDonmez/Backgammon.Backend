@@ -62,6 +62,9 @@ public class GameState
         }
     }
 
-    public int GetCheckersOnBarCount(PlayerId playerId) => Bar[playerId].Count;
+    public int GetCheckersOnBarCount(PlayerId playerId)
+    {
+        return Bar[playerId].Count;
+    }
     public int GetCheckersBorneOffCount(PlayerId playerId) => BorneOff[playerId].Count;
 }

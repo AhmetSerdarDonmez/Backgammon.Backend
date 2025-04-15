@@ -297,24 +297,17 @@ public class GameService
             // Special check for bearing off: can use a higher dice roll if no checker on that exact point
             if (IsBearingOffMove(playerId, requestedMove))
             {
-                // Find the highest dice roll available >= diceValueNeeded
                 var higherDice = _gameState.RemainingMoves
-                                    .Where(d => d >= diceValueNeeded)
-                                    .OrderByDescending(d => d)
-                                    .ToList();
+                                        .Where(d => d >= diceValueNeeded)
+                                        .OrderByDescending(d => d)
+                                        .ToList();
 
                 if (!higherDice.Any()) return (false, 0, $"Required dice value {diceValueNeeded} not available.");
 
-                // Check if there are checkers on higher points *within the home board*
                 int highestOccupiedPoint = GetHighestOccupiedPointInHomeBoard(playerId);
 
-                // If the start point IS the highest occupied point, then using a higher die is allowed
                 if (requestedMove.StartPointIndex == highestOccupiedPoint)
                 {
-                    // Player MUST use a die roll that matches the highest point if possible.
-                    // If they rolled exactly highestOccupiedPoint's value, they must use it.
-                    // If they rolled higher, and the highest point is the one they're trying to move,
-                    // they can use the higher die *only if* the exact die isn't available.
                     int actualDiceToUse = -1;
                     if (_gameState.RemainingMoves.Contains(diceValueNeeded))
                     {
@@ -322,7 +315,6 @@ public class GameService
                     }
                     else
                     {
-                        // Use the smallest available die that is >= needed value
                         actualDiceToUse = _gameState.RemainingMoves.Where(d => d >= diceValueNeeded).Min();
                         if (!_gameState.RemainingMoves.Contains(actualDiceToUse)) return (false, 0, "Logic error in bear off higher dice check."); // safety
                     }
@@ -330,11 +322,6 @@ public class GameService
                 }
                 else
                 {
-                    // Trying to bear off from a lower point when a higher point is occupied.
-                    // Must use a die value exactly matching the point index if possible,
-                    // or move a checker from a higher point instead.
-                    // This check means the player cannot *choose* to use a higher die value
-                    // for a lower point checker *if* a higher point checker exists.
                     if (!_gameState.RemainingMoves.Contains(diceValueNeeded))
                     {
                         return (false, 0, $"Must move from higher point ({highestOccupiedPoint}) or use exact dice roll ({diceValueNeeded}) if available.");
@@ -377,61 +364,23 @@ public class GameService
             // Need to ensure the start point is correct according to the dice roll used (handled by dice check logic)
         }
 
-        if (_gameState.CurrentDiceRoll?.Length == 2 && // Was a normal roll (not doubles already partially played)
-    _gameState.CurrentDiceRoll[0] != _gameState.CurrentDiceRoll[1] && // Not doubles
-    _gameState.RemainingMoves.Count == 2) // Both dice are theoretically still available (check performed at start of move attempt)
+        // Check for mandatory move if only one die could be played
+        if (_gameState.CurrentDiceRoll?.Length == 2 &&
+            _gameState.CurrentDiceRoll[0] != _gameState.CurrentDiceRoll[1] &&
+            _gameState.RemainingMoves.Count == 2)
         {
-            int dieX = diceValueNeeded; // The die used for the move currently being validated
-            int dieY = _gameState.RemainingMoves.FirstOrDefault(d => d != dieX); // The *other* die
+            int dieX = diceValueNeeded;
+            int dieY = _gameState.RemainingMoves.FirstOrDefault(d => d != dieX);
 
-            if (dieY != default) // Ensure we found the other die
+            if (dieY != default)
             {
-                // Check if *any* move was possible with die X *anywhere* on the board
-                bool movePossibleWithX = CanPlayerMoveWithSpecificDie(playerId, dieX);
-                // Check if *any* move was possible with die Y *anywhere* on the board
                 bool movePossibleWithY = CanPlayerMoveWithSpecificDie(playerId, dieY);
-
-                if (movePossibleWithX && !movePossibleWithY)
+                if (movePossibleWithY && !CanPlayerMoveWithSpecificDie(playerId, dieX))
                 {
-                    // Only X was playable, the current move attempt (using X) is mandatory - allow it.
-                }
-                else if (!movePossibleWithX && movePossibleWithY)
-                {
-                    // Only Y was playable, but player is attempting a move with X. This is invalid.
                     return (false, 0, $"Must play the other die ({dieY}) as it's the only possible move.");
                 }
-                else if (movePossibleWithX && movePossibleWithY)
-                {
-                    // Both dice were playable independently at the start. Now check the specific rule:
-                    // "If either number can be played but not both..." This implies a scenario where
-                    // playing one prevents playing the other. The simpler interpretation is often:
-                    // If only ONE die *total* can be moved (regardless of which one), play the larger.
-                    // If *both* moves can be completed (sequentially), the order doesn't matter unless
-                    // one choice blocks the other entirely.
-
-                    // Let's implement the check: If ONLY ONE die value leads to ANY valid move, enforce it.
-                    // The logic above already covers this: if !movePossibleWithX and movePossibleWithY,
-                    // then Y must be played.
-
-                    // Now consider the "play larger die" part explicitly.
-                    if (dieX < dieY && !movePossibleWithY) // Player chose smaller X, and larger Y was impossible
-                    {
-                        // This is fine, X was the only choice.
-                    }
-                    else if (dieY < dieX && !movePossibleWithX) // Player chose smaller Y, and larger X was impossible
-                    {
-                        // This case handled by the check earlier - if !movePossibleWithX && movePossibleWithY, it returns false.
-                    }
-                    // If both were possible initially, allow the move. The requirement to play *both*
-                    // is handled by the turn ending logic in MakeMove. The tricky case of
-                    // "can play 6 OR 4, but not both sequentially" is complex and sometimes ignored
-                    // in simpler implementations. We'll allow either move if both were initially possible.
-
-                }
-                // else if (!movePossibleWithX && !movePossibleWithY) -> Handled by CanPlayerMove check in RollDice/MakeMove
             }
         }
-
 
         // If all checks pass
         return (true, diceValueNeeded, string.Empty);
@@ -440,13 +389,15 @@ public class GameService
     // New helper method in GameService
     private bool CanPlayerMoveWithSpecificDie(PlayerId playerId, int die)
     {
-        // Temporarily create a list containing only the die to check
         var singleDieList = new List<int> { die };
-        // Call the existing CanPlayerMove logic, but only considering this single die
         return CanPlayerMove(playerId, singleDieList);
-        // NOTE: This assumes CanPlayerMove correctly uses the passed list.
-        // You might need to adjust CanPlayerMove slightly if it relies on _gameState.RemainingMoves directly internally.
-        // A safer way might be to copy the core logic of CanPlayerMove here and filter by the specific die.
+    }
+
+    private bool IsEndPointOpen(PlayerId playerId, int pointIndex)
+    {
+        if (pointIndex < 1 || pointIndex > 24) return true; // For bear-off
+        BoardPoint endPoint = _gameState.Board[pointIndex - 1];
+        return endPoint.Checkers.Count < 2 || endPoint.Checkers.First().PlayerId == playerId;
     }
 
     private bool IsBearingOffMove(PlayerId playerId, MoveData move)
@@ -600,8 +551,8 @@ public class GameService
                 int targetPoint = GetEntryPoint(player.Color, die);
                 if (targetPoint != -1) // Ensure valid point calculation
                 {
-                    var validationResult = ValidateMove(playerId, new MoveData { StartPointIndex = 0, EndPointIndex = targetPoint });
-                    if (validationResult.IsValid) return true; // Found a valid entry move
+                    // Directly check if the entry point is open
+                    if (IsEndPointOpen(playerId, targetPoint)) return true;
                 }
             }
             return false; // No valid entry moves possible
@@ -618,32 +569,20 @@ public class GameService
                 {
                     // Check normal move
                     int targetPointIndex = GetTargetPointIndex(player.Color, i, die);
-                    if (targetPointIndex > 0 && targetPointIndex <= 24)
+                    if (targetPointIndex > 0 && targetPointIndex <= 24 && IsEndPointOpen(playerId, targetPointIndex))
                     {
-                        var validationResult = ValidateMove(playerId, new MoveData { StartPointIndex = i, EndPointIndex = targetPointIndex });
-                        if (validationResult.IsValid) return true;
+                        return true;
                     }
 
                     // Check bearing off move
                     if (canBearOff)
                     {
                         int bearOffEndPoint = player.Color == PlayerColor.White ? 25 : 0;
-                        // Check if moving die spaces lands exactly on bear-off point or beyond
                         int requiredPoint = player.Color == PlayerColor.White ? 25 - die : die; // Point index needed to bear off with 'die'
                         int highestPoint = GetHighestOccupiedPointInHomeBoard(playerId);
 
-                        if (i == requiredPoint) // Can bear off from this point with this die?
-                        {
-                            var validationResult = ValidateMove(playerId, new MoveData { StartPointIndex = i, EndPointIndex = bearOffEndPoint });
-                            if (validationResult.IsValid) return true;
-                        }
-                        // Also check if we can bear off from the highest point using a larger die
-                        else if (i == highestPoint && die > (player.Color == PlayerColor.White ? 25 - i : i))
-                        {
-                            var validationResult = ValidateMove(playerId, new MoveData { StartPointIndex = i, EndPointIndex = bearOffEndPoint });
-                            if (validationResult.IsValid) return true;
-                        }
-
+                        if (i == requiredPoint) return true;
+                        else if (i == highestPoint && die > (player.Color == PlayerColor.White ? 25 - i : i)) return true;
                     }
                 }
             }
