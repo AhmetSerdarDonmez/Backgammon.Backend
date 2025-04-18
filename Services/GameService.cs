@@ -193,6 +193,14 @@ public class GameService
         }
     }
 
+    private bool TryConsumeDie(List<int> remainingMoves, int dieToUse) {
+    if (remainingMoves.Contains(dieToUse)) {
+        remainingMoves.Remove(dieToUse);
+        return true;
+    }
+    return false;
+}
+
     public bool MakeMove(PlayerId playerId, MoveData move)
     {
         if (_gameState.CurrentPlayerId != playerId || _gameState.Phase != GamePhase.PlayerTurn) return false;
@@ -206,12 +214,15 @@ public class GameService
             return false;
         }
 
+
+
         // Execute the move
         ExecuteMove(playerId, move, validationResult.DiceValueUsed);
 
         // Remove the used dice value
         _gameState.RemainingMoves.Remove(validationResult.DiceValueUsed);
         Console.WriteLine($"Move successful. Remaining moves: [{string.Join(", ", _gameState.RemainingMoves)}]");
+
 
 
         // Check if turn should end
@@ -406,7 +417,7 @@ public class GameService
         Player player = _gameState.Players[playerId];
         bool isPlayerWhite = player.Color == PlayerColor.White;
         // White bears off to 25, Black to 0 (using our convention)
-        return (isPlayerWhite && move.EndPointIndex == 25) || (!isPlayerWhite && move.EndPointIndex == 0);
+        return (isPlayerWhite && move.EndPointIndex == 25 || isPlayerWhite && move.EndPointIndex > 25) || (!isPlayerWhite && move.EndPointIndex == 0 || !isPlayerWhite && move.EndPointIndex < 0);
     }
 
     private bool CanBearOff(PlayerId playerId)
@@ -440,11 +451,14 @@ public class GameService
         bool isPlayerWhite = player.Color == PlayerColor.White;
         int highestPoint = -1;
 
+
+        
+
         if (isPlayerWhite) // Home 19-24, highest is 24
         {
-            for (int i = 24; i >= 19; i--)
+            for (int i = 19; i <= 24; i++)
             {
-                if (_gameState.Board[i - 1].Checkers.Any(c => c.PlayerId == playerId))
+                if (_gameState.Board[i + 1].Checkers.Any(c => c.PlayerId == playerId))
                 {
                     highestPoint = i;
                     break;
