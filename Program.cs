@@ -30,7 +30,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Listen on the local network IP
-builder.WebHost.UseUrls("http://10.16.4.28:5369");
+builder.WebHost.UseUrls("http://192.168.1.101:5369");
 
 var app = builder.Build();
 

@@ -1,5 +1,6 @@
 ﻿using Backgammon.Backend.Models;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Linq; // Add LINQ for easier querying
 
 namespace Backgammon.Backend.Services;
@@ -250,8 +251,8 @@ public class GameService
         bool isPlayerWhite = player.Color == PlayerColor.White;
         int moveDirection = isPlayerWhite ? 1 : -1; // White moves 1->24, Black moves 24->1
 
-        // 1. Check Bar Rule: If checkers are on the bar, must enter first.
-        if (barCount > 0 && requestedMove.StartPointIndex != 0) // 0 represents the bar
+        // 1. Bar entry checks
+        if (barCount > 0 && requestedMove.StartPointIndex != 0)
         {
             return (false, 0, "Must move checkers from the bar first.");
         }
@@ -271,9 +272,10 @@ public class GameService
 
             // Basic validation for entry point based on dice
             if (targetPointIndex < 1 || targetPointIndex > 24) return (false, 0, "Invalid entry point.");
-            if (!isPlayerWhite && (targetPointIndex < 19 || targetPointIndex > 24)) return (false, 0, "Black must enter in opponent's home board (points 19-24).");
-            if (isPlayerWhite && (targetPointIndex < 1 || targetPointIndex > 6)) return (false, 0, "White must enter in opponent's home board (points 1-6).");
-
+            if (!isPlayerWhite && (targetPointIndex < 19 || targetPointIndex > 24))
+                return (false, 0, "Black must enter in opponent's home board (points 19-24).");
+            if (isPlayerWhite && (targetPointIndex < 1 || targetPointIndex > 6))
+                return (false, 0, "White must enter in opponent's home board (points 1-6).");
         }
         else if (IsBearingOffMove(playerId, requestedMove)) // Bearing Off
         {
@@ -285,7 +287,8 @@ public class GameService
             diceValueNeeded = Math.Abs(targetPointIndex - requestedMove.StartPointIndex);
 
             // Check if the starting point for bearing off is valid
-            if (requestedMove.StartPointIndex < (isPlayerWhite ? 19 : 1) || requestedMove.StartPointIndex > (isPlayerWhite ? 24 : 6))
+            if (requestedMove.StartPointIndex < (isPlayerWhite ? 19 : 1) ||
+                requestedMove.StartPointIndex > (isPlayerWhite ? 24 : 6))
             {
                 return (false, 0, "Can only bear off from the home board.");
             }
@@ -302,43 +305,51 @@ public class GameService
             }
         }
 
-
         // 2. Check Dice: Does the player have the required dice value available?
         if (!_gameState.RemainingMoves.Contains(diceValueNeeded))
         {
-            // Special check for bearing off: can use a higher dice roll if no checker on that exact point
             if (IsBearingOffMove(playerId, requestedMove))
             {
                 var higherDice = _gameState.RemainingMoves
-                                        .Where(d => d >= diceValueNeeded)
-                                        .OrderByDescending(d => d)
-                                        .ToList();
+                    .Where(d => d >= diceValueNeeded)
+                    .OrderByDescending(d => d)
+                    .ToList();
 
-                if (!higherDice.Any()) return (false, 0, $"Required dice value {diceValueNeeded} not available.");
+                if (!higherDice.Any())
+                    return (false, 0, $"Required dice value {diceValueNeeded} not available.");
 
                 int highestOccupiedPoint = GetHighestOccupiedPointInHomeBoard(playerId);
 
                 if (requestedMove.StartPointIndex == highestOccupiedPoint)
                 {
-                    int actualDiceToUse = -1;
-                    if (_gameState.RemainingMoves.Contains(diceValueNeeded))
-                    {
-                        actualDiceToUse = diceValueNeeded;
-                    }
-                    else
-                    {
-                        actualDiceToUse = _gameState.RemainingMoves.Where(d => d >= diceValueNeeded).Min();
-                        if (!_gameState.RemainingMoves.Contains(actualDiceToUse)) return (false, 0, "Logic error in bear off higher dice check."); // safety
-                    }
-                    diceValueNeeded = actualDiceToUse; // Use the determined die value
+                    // Can use any higher die
+                    int actualDiceToUse = _gameState.RemainingMoves.Where(d => d >= diceValueNeeded).Min();
+                    diceValueNeeded = actualDiceToUse;
                 }
                 else
                 {
-                    if (!_gameState.RemainingMoves.Contains(diceValueNeeded))
+                    // Check path clarity for white players (points 19 to start-1 must be clear)
+                    if (isPlayerWhite)
                     {
-                        return (false, 0, $"Must move from higher point ({highestOccupiedPoint}) or use exact dice roll ({diceValueNeeded}) if available.");
+                        bool pathIsClear = true;
+                        for (int i = 19; i < requestedMove.StartPointIndex; i++)
+                        {
+                            if (_gameState.Board[i - 1].Checkers.Any(c => c.PlayerId == playerId))
+                            {
+                                pathIsClear = false;
+                                break;
+                            }
+                        }
+
+                        if (!pathIsClear)
+                        {
+                            return (false, 0, $"Path blocked by checkers on points 19-{requestedMove.StartPointIndex - 1}.");
+                        }
                     }
-                    // If exact dice is available, proceed with validation using diceValueNeeded
+
+                    // Use the smallest higher die if available
+                    int actualDiceToUse = _gameState.RemainingMoves.Where(d => d >= diceValueNeeded).Min();
+                    diceValueNeeded = actualDiceToUse;
                 }
             }
             else // Not bearing off, exact dice needed
@@ -347,11 +358,10 @@ public class GameService
             }
         }
 
-
         // 3. Check Start Point: Does the player have checkers at the start point? (Skip for bar)
         if (requestedMove.StartPointIndex > 0) // Not starting from bar
         {
-            BoardPoint startPoint = _gameState.Board[requestedMove.StartPointIndex - 1]; // Adjust for 0-based index
+            BoardPoint startPoint = _gameState.Board[requestedMove.StartPointIndex - 1];
             if (!startPoint.Checkers.Any() || startPoint.Checkers.First().PlayerId != playerId)
             {
                 return (false, diceValueNeeded, "No checker at the starting point.");
@@ -361,7 +371,7 @@ public class GameService
         // 4. Check End Point: Is the target point valid/open? (Skip for bear off)
         if (targetPointIndex > 0 && targetPointIndex < 25) // Not bearing off
         {
-            BoardPoint endPoint = _gameState.Board[targetPointIndex - 1]; // Adjust for 0-based index
+            BoardPoint endPoint = _gameState.Board[targetPointIndex - 1];
             if (endPoint.Checkers.Count > 1 && endPoint.Checkers.First().PlayerId != playerId)
             {
                 return (false, diceValueNeeded, "Target point is blocked by opponent.");
@@ -371,9 +381,24 @@ public class GameService
         // 5. Bearing Off Specific Checks
         if (IsBearingOffMove(playerId, requestedMove))
         {
-            // Already checked CanBearOff and home board range
-            // Already checked dice availability (including higher dice rule)
-            // Need to ensure the start point is correct according to the dice roll used (handled by dice check logic)
+            // Added path check for white bearing off with higher dice
+            if (isPlayerWhite)
+            {
+                bool pathIsClear = true;
+                for (int i = 19; i < requestedMove.StartPointIndex; i++)
+                {
+                    if (_gameState.Board[i - 1].Checkers.Any(c => c.PlayerId == playerId))
+                    {
+                        pathIsClear = false;
+                        break;
+                    }
+                }
+
+                if (!pathIsClear && diceValueNeeded > (25 - requestedMove.StartPointIndex))
+                {
+                    return (false, 0, $"Path blocked by checkers on points 19-{requestedMove.StartPointIndex - 1}.");
+                }
+            }
         }
 
         // Check for mandatory move if only one die could be played
@@ -433,7 +458,15 @@ public class GameService
         for (int i = 1; i <= 24; i++)
         {
             // If outside home board
-            if (i < homeStart || i > homeEnd)
+            if (!isPlayerWhite && (i < homeStart || i > homeEnd))
+            {
+                BoardPoint point = _gameState.Board[i - 1];
+                if (point.Checkers.Any(c => c.PlayerId == playerId))
+                {
+                    return false; // Found a checker outside home board
+                }
+            }
+            if(isPlayerWhite && (i < homeStart || i > homeEnd))
             {
                 BoardPoint point = _gameState.Board[i - 1];
                 if (point.Checkers.Any(c => c.PlayerId == playerId))
@@ -451,21 +484,19 @@ public class GameService
         bool isPlayerWhite = player.Color == PlayerColor.White;
         int highestPoint = -1;
 
-
-        
-
-        if (isPlayerWhite) // Home 19-24, highest is 24
+        if (isPlayerWhite) // White's home board: 19-24 (highest die value is 6 at point 19)
         {
+            // Iterate from 19 (die value 6) to 24 (die value 1) to find the *highest die requirement*
             for (int i = 19; i <= 24; i++)
             {
-                if (_gameState.Board[i + 1].Checkers.Any(c => c.PlayerId == playerId))
+                if (_gameState.Board[i - 1].Checkers.Any(c => c.PlayerId == playerId))
                 {
-                    highestPoint = i;
-                    break;
+                    highestPoint = i; // Store the point with the highest die requirement
+                    break; // Exit loop once found
                 }
             }
         }
-        else // Home 1-6, highest is 6
+        else // Black's home board: 1-6 (standard logic)
         {
             for (int i = 6; i >= 1; i--)
             {
@@ -476,6 +507,7 @@ public class GameService
                 }
             }
         }
+
         return highestPoint;
     }
 
@@ -575,11 +607,13 @@ public class GameService
 
         // If not on the bar, check all checkers on the board
         bool canBearOff = CanBearOff(playerId);
+        Console.WriteLine("bu can bear off değeri:"+canBearOff);
         for (int i = 1; i <= 24; i++)
         {
             BoardPoint startPoint = _gameState.Board[i - 1];
             if (startPoint.Checkers.Any() && startPoint.Checkers.First().PlayerId == playerId)
             {
+
                 foreach (int die in remainingMoves.Distinct()) // Check each unique die value
                 {
                     // Check normal move
@@ -595,9 +629,13 @@ public class GameService
                         int bearOffEndPoint = player.Color == PlayerColor.White ? 25 : 0;
                         int requiredPoint = player.Color == PlayerColor.White ? 25 - die : die; // Point index needed to bear off with 'die'
                         int highestPoint = GetHighestOccupiedPointInHomeBoard(playerId);
+                        Console.WriteLine("bu required point:" + requiredPoint + " bu i:" + i + " bu da highest point:" + highestPoint);
+                        Console.WriteLine("--- önceki ----- burası geçerse diye var burada sırasıyla i -- highest point -- die --- playercolor olacak " + i + " " + highestPoint + " " + die + " " + player.Color);
 
                         if (i == requiredPoint) return true;
                         else if (i == highestPoint && die > (player.Color == PlayerColor.White ? 25 - i : i)) return true;
+
+                        Console.WriteLine("---- sonraki ----burası geçerse diye var burada sırasıyla i -- highest point -- die --- playercolor olacak " + i + " " + highestPoint + " " + die + " " + player.Color);
                     }
                 }
             }
