@@ -544,9 +544,10 @@ public class GameService
             {
                 _gameState.Phase = GamePhase.GameOver;
                 _gameState.WinnerId = playerId;
-                _gameState.CurrentPlayerId = null; // No more turns
+                _gameState.CurrentPlayerId = playerId; // No more turns
                 _gameState.RemainingMoves?.Clear();
                 _gameState.CurrentDiceRoll = null;
+
                 Console.WriteLine($"Game Over! Player {playerId} wins!");
             }
         }
@@ -607,7 +608,7 @@ public class GameService
 
         // If not on the bar, check all checkers on the board
         bool canBearOff = CanBearOff(playerId);
-        Console.WriteLine("bu can bear off değeri:"+canBearOff);
+ //       Console.WriteLine("bu can bear off değeri:"+canBearOff);
         for (int i = 1; i <= 24; i++)
         {
             BoardPoint startPoint = _gameState.Board[i - 1];
@@ -629,13 +630,13 @@ public class GameService
                         int bearOffEndPoint = player.Color == PlayerColor.White ? 25 : 0;
                         int requiredPoint = player.Color == PlayerColor.White ? 25 - die : die; // Point index needed to bear off with 'die'
                         int highestPoint = GetHighestOccupiedPointInHomeBoard(playerId);
-                        Console.WriteLine("bu required point:" + requiredPoint + " bu i:" + i + " bu da highest point:" + highestPoint);
-                        Console.WriteLine("--- önceki ----- burası geçerse diye var burada sırasıyla i -- highest point -- die --- playercolor olacak " + i + " " + highestPoint + " " + die + " " + player.Color);
+          //              Console.WriteLine("bu required point:" + requiredPoint + " bu i:" + i + " bu da highest point:" + highestPoint);
+          //              Console.WriteLine("--- önceki ----- burası geçerse diye var burada sırasıyla i -- highest point -- die --- playercolor olacak " + i + " " + highestPoint + " " + die + " " + player.Color);
 
                         if (i == requiredPoint) return true;
                         else if (i == highestPoint && die > (player.Color == PlayerColor.White ? 25 - i : i)) return true;
 
-                        Console.WriteLine("---- sonraki ----burası geçerse diye var burada sırasıyla i -- highest point -- die --- playercolor olacak " + i + " " + highestPoint + " " + die + " " + player.Color);
+          //              Console.WriteLine("---- sonraki ----burası geçerse diye var burada sırasıyla i -- highest point -- die --- playercolor olacak " + i + " " + highestPoint + " " + die + " " + player.Color);
                     }
                 }
             }

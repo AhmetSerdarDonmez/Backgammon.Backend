@@ -13,7 +13,7 @@ builder.Services.AddCors(options =>
                           policy.SetIsOriginAllowed(origin =>
                           {
                               // Allow any origin that starts with "http://10." or "https://10."
-                              return origin.StartsWith("http://10.") || origin.StartsWith("https://10.") || origin.StartsWith("http://localhost")|| origin.StartsWith("https://192.")|| origin.StartsWith("http://192.");
+                              return origin.StartsWith("http://10.") || origin.StartsWith("https://10.") || origin.StartsWith("http://localhost")|| origin.StartsWith("https://192.")|| origin.StartsWith("http://192.") || origin.StartsWith("http://172.");
                           })
                           .AllowAnyHeader()
                           .AllowAnyMethod()
@@ -30,7 +30,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Listen on the local network IP
-builder.WebHost.UseUrls("http://192.168.1.101:5369");
+builder.WebHost.UseUrls("http://10.16.4.28:5369");
 
 var app = builder.Build();
 
