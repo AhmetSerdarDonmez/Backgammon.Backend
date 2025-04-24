@@ -186,7 +186,7 @@ public class GameService
         if (!CanPlayerMove(playerId, _gameState.RemainingMoves))
         {
             Console.WriteLine("No possible moves for this roll. Turn skipped.");
-            EndTurn(); // Automatically end turn if no moves are possible
+ //           EndTurn(); // Automatically end turn if no moves are possible
         }
         else
         {
@@ -572,7 +572,7 @@ public class GameService
 
     // --- Turn Management & Helper ---
 
-    private void EndTurn()
+    public void EndTurn()
     {
         if (_gameState.Phase == GamePhase.GameOver) return; // Don't switch turns if game ended
 
@@ -584,7 +584,7 @@ public class GameService
     }
 
     // Checks if *any* valid move exists for the player with the given dice rolls
-    private bool CanPlayerMove(PlayerId playerId, List<int> remainingMoves)
+    public bool CanPlayerMove(PlayerId playerId, List<int> remainingMoves)
     {
         if (remainingMoves == null || !remainingMoves.Any()) return false;
 

@@ -152,13 +152,30 @@ public class GameHub : Hub
         }
 
 
-        // TODO: Implement dice rolling logic in GameService
-        _gameService.RollDice(player.Id); // This method should update GameState
+        // Roll the dice and update game state
+        _gameService.RollDice(player.Id);
 
-        // Broadcast updated state after rolling
+        // Send the updated state to show the rolled dice
         await Clients.All.SendAsync("UpdateGameState", _gameService.CurrentState);
-        // TODO: Maybe send specific dice roll info: SendAsync("DiceRolled", diceResult);
+
+        // Check if there are no possible moves after rolling
+        if (!_gameService.CanPlayerMove(player.Id, _gameService.CurrentState.RemainingMoves))
+        {
+            // Wait for 3 seconds before ending the turn
+            await Task.Delay(2500); // Delay duration (adjust as needed)
+            
+            // After delay, check again (in case a move was made during the delay)
+
+                // End the turn if no moves were made
+                _gameService.EndTurn();
+                await Clients.All.SendAsync("UpdateGameState", _gameService.CurrentState);
+            
+        }
     }
+
+
+
+
 
     [HubMethodName("MakeMove")]
     public async Task MakeMove(MoveData move)
